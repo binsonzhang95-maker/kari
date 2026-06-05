@@ -1,8 +1,8 @@
 # kari
 
-<img width="1440" height="920" alt="image" src="https://github.com/user-attachments/assets/a9fd5080-2947-4850-ac6f-73d67d4b64e5" />
-
 [English](README.md) | **中文**
+
+<img width="1440" height="920" alt="image" src="https://github.com/user-attachments/assets/a9fd5080-2947-4850-ac6f-73d67d4b64e5" />
 
 可自托管的 **团队 vibe coding 协作底座** —— 让团队在同一台共享 server 上跑
 AI 编码 CLI(Claude Code、Codex、DeepSeek …),协同同一批项目。
