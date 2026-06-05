@@ -42,10 +42,21 @@ func (s *server) startSyncthing(ctx context.Context) error {
 		return fmt.Errorf("syncthing home dir chmod 0700: %w", err)
 	}
 
+	port := s.cfg.SyncthingPort
+	if port <= 0 || port > 65535 {
+		port = 22000
+	}
 	sidecar := syncthing.NewSidecarManager()
 	startCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := sidecar.Start(startCtx, syncthing.StartOptions{HomeDir: homeDir, Binary: binary}); err != nil {
+	// Bind the BEP data port on all interfaces at a fixed, advertised port
+	// so remote clients can reach this sidecar directly — the single-tenant
+	// server has no tunnel/proxy in front of Syncthing.
+	if err := sidecar.Start(startCtx, syncthing.StartOptions{
+		HomeDir:           homeDir,
+		Binary:            binary,
+		DataListenAddress: fmt.Sprintf("tcp://0.0.0.0:%d", port),
+	}); err != nil {
 		return fmt.Errorf("syncthing sidecar start: %w", err)
 	}
 

@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -17,8 +16,11 @@ type syncthingPairRequest struct {
 	DesktopDeviceID  string   `json:"desktop_device_id"`
 	DesktopAddresses []string `json:"desktop_addresses,omitempty"`
 	DesktopName      string   `json:"desktop_name,omitempty"`
+	WorkspaceID      string   `json:"workspace_id"`
 	WorkspaceName    string   `json:"workspace_name"`
-	ProjectPath      string   `json:"project_path"`
+	// ProjectPath is accepted for wire-compat but no longer namespaces the
+	// folder — the synced unit is the whole workspace tree (see handler).
+	ProjectPath string `json:"project_path,omitempty"`
 }
 
 type syncthingPairResponse struct {
@@ -35,8 +37,11 @@ type syncthingPairResponse struct {
 // exist, adds the device to the folder membership, and returns the server's
 // device id + addresses so the client can configure its own side.
 //
-// Single-tenant: there is no per-tenant workspace_id, so the (sanitized)
-// workspace_name is the workspace namespace under sync_dir.
+// The synced folder is the workspace tree at <sync_dir>/<workspace_id>/<workspace_name>
+// — IDENTICAL to the path engineFor() roots the gRPC/PTY/exec tree at, so the
+// files Syncthing mirrors and the directory a remote terminal opens in are the
+// same. Namespacing by workspace_id (not workspace_name) keeps distinct
+// workspaces that happen to share a name from colliding on one folder.
 func (s *server) handleSyncthingPair(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -63,38 +68,27 @@ func (s *server) handleSyncthingPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopDeviceID = strings.TrimSpace(req.DesktopDeviceID)
+	req.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
 	req.WorkspaceName = strings.TrimSpace(req.WorkspaceName)
 	req.ProjectPath = strings.TrimSpace(req.ProjectPath)
 	if !looksLikeSyncthingDeviceID(req.DesktopDeviceID) {
 		pairErr(w, http.StatusBadRequest, "invalid_device_id", "desktop_device_id is not a valid Syncthing device id")
 		return
 	}
+	if req.WorkspaceID == "" {
+		pairErr(w, http.StatusBadRequest, "invalid_request", "workspace_id is required")
+		return
+	}
 	if req.WorkspaceName == "" {
 		pairErr(w, http.StatusBadRequest, "invalid_request", "workspace_name is required")
 		return
 	}
-	if req.ProjectPath == "" {
-		pairErr(w, http.StatusBadRequest, "missing_project_path", "project_path is required")
-		return
-	}
 
-	// Single-tenant workspace namespace: sanitized workspace_name. FolderIDFor
-	// validates project_path (absolute / drive / ".." / collapse-to-empty all
-	// reject), so the joined path is guaranteed under sync_dir.
-	wsKey := safeName(req.WorkspaceName)
-	// Canonicalize project_path (backslashes → slashes, cleaned) so the folder
-	// id and the on-disk path derive from the same normalized input.
-	proj := strings.TrimPrefix(pathpkg.Clean("/"+strings.ReplaceAll(req.ProjectPath, "\\", "/")), "/")
-	if proj == "" || proj == "." {
-		pairErr(w, http.StatusBadRequest, "missing_project_path", "project_path is required")
-		return
-	}
-	folderID, err := syncthing.FolderIDFor(wsKey, proj)
-	if err != nil {
-		pairErr(w, http.StatusBadRequest, "invalid_project_path", err.Error())
-		return
-	}
-	folderPath := filepath.Join(s.cfg.SyncDir, wsKey, filepath.FromSlash(proj))
+	// The synced folder is the workspace tree, namespaced by workspace_id and
+	// keyed identically to engineFor() so PTY/exec and Syncthing share one
+	// directory. safeName() keeps each id/name to a single safe path segment.
+	folderID := syncthing.FolderIDForWorkspaceID(req.WorkspaceID)
+	folderPath := filepath.Join(s.cfg.SyncDir, safeName(req.WorkspaceID), safeName(req.WorkspaceName))
 
 	// Folder dir + .stfolder marker must exist before telling Syncthing about
 	// the folder, or it fail-closes with "folder marker missing".
@@ -124,7 +118,7 @@ func (s *server) handleSyncthingPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.pairMu.Lock()
-	err = addDesktopDeviceToFolder(rec, folderID, folderPath, serverDevice, req.WorkspaceName, req)
+	err := addDesktopDeviceToFolder(rec, folderID, folderPath, serverDevice, req.WorkspaceName, req)
 	s.pairMu.Unlock()
 	if err != nil {
 		pairErr(w, http.StatusInternalServerError, "reconciler_failed", err.Error())
@@ -144,7 +138,8 @@ func (s *server) handleSyncthingPair(w http.ResponseWriter, r *http.Request) {
 }
 
 // syncthingServerAddresses advertises where the client should reach the
-// server's Syncthing (default sync port 22000). Override with --syncthing-addr.
+// server's Syncthing — the request host at the configured BEP port (default
+// 22000). Override the whole address with --syncthing-addr.
 func (s *server) syncthingServerAddresses(r *http.Request) []string {
 	if a := strings.TrimSpace(s.cfg.SyncthingAddr); a != "" {
 		return []string{a}
@@ -156,7 +151,11 @@ func (s *server) syncthingServerAddresses(r *http.Request) []string {
 	if strings.TrimSpace(host) == "" {
 		return nil
 	}
-	return []string{"tcp://" + net.JoinHostPort(host, "22000")}
+	port := s.cfg.SyncthingPort
+	if port <= 0 {
+		port = 22000
+	}
+	return []string{"tcp://" + net.JoinHostPort(host, fmt.Sprintf("%d", port))}
 }
 
 // addDesktopDeviceToFolder creates or updates the folder's desired state so

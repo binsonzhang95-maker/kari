@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -48,7 +49,8 @@ type Config struct {
 	PtyTimeout     time.Duration
 	MaxOutputBytes int64
 	SyncthingBinary string // absolute path; empty = auto-detect on PATH
-	SyncthingAddr   string // advertised syncthing address for clients; empty = derive from request host :22000
+	SyncthingAddr   string // advertised syncthing address for clients; empty = derive from request host + SyncthingPort
+	SyncthingPort   int    // BEP data port the sidecar binds on 0.0.0.0 and clients connect to (default 22000)
 }
 
 func loadConfig() Config {
@@ -63,6 +65,7 @@ func loadConfig() Config {
 		MaxOutputBytes: 10 << 20,
 		SyncthingBinary: os.Getenv("KARI_SYNCTHING_BINARY"),
 		SyncthingAddr:   os.Getenv("KARI_SYNCTHING_ADDR"),
+		SyncthingPort:   envInt("KARI_SYNCTHING_PORT", 22000),
 	}
 	flag.StringVar(&c.ListenAddr, "listen", c.ListenAddr, "listen address")
 	flag.StringVar(&c.SyncDir, "sync-dir", c.SyncDir, "directory holding the synced workspace tree(s)")
@@ -70,13 +73,26 @@ func loadConfig() Config {
 	flag.StringVar(&c.Shell, "shell", c.Shell, "shell for exec/pty")
 	flag.StringVar(&c.SyncthingBinary, "syncthing-binary", c.SyncthingBinary, "absolute path to the syncthing binary (empty = auto-detect on PATH)")
 	flag.StringVar(&c.SyncthingAddr, "syncthing-addr", c.SyncthingAddr, "advertised syncthing address for clients, e.g. tcp://host:22000 (empty = derive from request host)")
+	flag.IntVar(&c.SyncthingPort, "syncthing-port", c.SyncthingPort, "BEP data port the syncthing sidecar binds (0.0.0.0) and clients connect to")
 	flag.Parse()
+	if c.SyncthingPort <= 0 || c.SyncthingPort > 65535 {
+		c.SyncthingPort = 22000
+	}
 	return c
 }
 
 func env(k, def string) string {
 	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
 		return v
+	}
+	return def
+}
+
+func envInt(k string, def int) int {
+	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return def
 }
@@ -184,6 +200,13 @@ func (s *server) Sync(stream transport.FileService_SyncServer) error {
 	}
 	log.Printf("sync connected workspace=%s name=%q root=%s", wsid, wsname, engine.Root())
 	session := filesync.NewSession(engine, secureStream)
+	// Syncthing is the mandatory (and only) file mover in the single-tenant
+	// server: the gRPC Sync stream is a CONTROL channel — bootstrap, remote
+	// session listing, MCP local-exec, PTY-count — never a file plane. Force
+	// control-only so the server never pushes the workspace tree over gRPC
+	// (which would double-deliver files Syncthing already manages and race
+	// its writes). The legacy gRPC file transfer is intentionally disabled.
+	session.SetControlOnly(true)
 	// Register for MCP local-exec routing if the client advertised it.
 	if s.localExec != nil && clientID != "" && transport.HasCapability(hello, transport.CapabilityLocalExec) {
 		unregister := s.localExec.register(wsid, clientID, session, hello.Capabilities)

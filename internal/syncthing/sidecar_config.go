@@ -35,15 +35,15 @@ import (
 // HomeDir is created with 0700 if missing. If it exists with a
 // different mode, that's the caller's problem to fix (callers
 // enforce the §3.6 0700 invariant before invoking Start).
-func ensureConfigXML(homeDir string, guiPort int, bepPort int) error {
+func ensureConfigXML(homeDir string, guiPort int, listenAddr string) error {
 	if homeDir == "" {
 		return fmt.Errorf("syncthing config: empty homeDir")
 	}
 	if guiPort <= 0 || guiPort > 65535 {
 		return fmt.Errorf("syncthing config: invalid gui port %d", guiPort)
 	}
-	if bepPort <= 0 || bepPort > 65535 {
-		return fmt.Errorf("syncthing config: invalid bep port %d", bepPort)
+	if listenAddr == "" {
+		return fmt.Errorf("syncthing config: empty listen address")
 	}
 	if err := os.MkdirAll(homeDir, 0o700); err != nil {
 		return fmt.Errorf("syncthing config: MkdirAll %s: %w", homeDir, err)
@@ -62,7 +62,7 @@ func ensureConfigXML(homeDir string, guiPort int, bepPort int) error {
 		// because a 0-byte file is almost certainly the result of
 		// a crashed/interrupted previous write, not deliberate
 		// operator action.
-		body = []byte(minimalConfigXML(guiPort, bepPort))
+		body = []byte(minimalConfigXML(guiPort, listenAddr))
 	} else {
 		// Round-1 review High fix: existing config that can't be
 		// RMW'd MUST fail-closed, not silently overwrite. The
@@ -81,7 +81,7 @@ func ensureConfigXML(homeDir string, guiPort int, bepPort int) error {
 		if rerr != nil {
 			return fmt.Errorf("syncthing config: existing config.xml at %s cannot be RMW'd (%w); refusing to overwrite — manually inspect / repair or remove the file to fall through to the minimal-config bootstrap path", cfgPath, rerr)
 		}
-		rewritten, rerr = rewriteListenAddress(rewritten, bepPort)
+		rewritten, rerr = rewriteListenAddress(rewritten, listenAddr)
 		if rerr != nil {
 			return fmt.Errorf("syncthing config: existing config.xml at %s cannot be RMW'd (%w); refusing to overwrite — manually inspect / repair or remove the file to fall through to the minimal-config bootstrap path", cfgPath, rerr)
 		}
@@ -202,7 +202,7 @@ func renderGUIBlock(port int) string {
 // listenAddress, it injects one just before </options>. If the config
 // has no <options>, it injects a minimal options block just before
 // </configuration>. Everything else is preserved byte-exactly.
-func rewriteListenAddress(existing []byte, port int) ([]byte, error) {
+func rewriteListenAddress(existing []byte, listenAddr string) ([]byte, error) {
 	dec := xml.NewDecoder(bytes.NewReader(existing))
 
 	var (
@@ -264,7 +264,7 @@ func rewriteListenAddress(existing []byte, port int) ([]byte, error) {
 		}
 	}
 
-	newListen := renderListenAddress(port)
+	newListen := renderListenAddress(listenAddr)
 	if listenStart >= 0 && listenEnd > listenStart {
 		var buf bytes.Buffer
 		buf.Grow(len(existing) + len(newListen))
@@ -297,8 +297,18 @@ func rewriteListenAddress(existing []byte, port int) ([]byte, error) {
 	return nil, errors.New("syncthing config: no <options> block and no </configuration> closer found")
 }
 
-func renderListenAddress(port int) string {
-	return fmt.Sprintf(`        <listenAddress>tcp://127.0.0.1:%d</listenAddress>`, port)
+func renderListenAddress(listenAddr string) string {
+	return fmt.Sprintf(`        <listenAddress>%s</listenAddress>`, xmlEscape(listenAddr))
+}
+
+// xmlEscape escapes a value for safe interpolation into XML text. The listen
+// address is normally a well-formed "tcp://host:port", but escaping defends
+// against a malformed operator-supplied DataListenAddress producing invalid
+// (or injected) config XML.
+func xmlEscape(s string) string {
+	var b bytes.Buffer
+	_ = xml.EscapeText(&b, []byte(s))
+	return b.String()
 }
 
 // minimalConfigXML returns the Kari-default config.xml body for a
@@ -315,13 +325,13 @@ func renderListenAddress(port int) string {
 //   - No <folder> or <device> elements — syncthing generates its
 //     own device identity (cert.pem) on first start; folders are
 //     added later via REST PUT from the reconciler.
-func minimalConfigXML(guiPort int, bepPort int) string {
+func minimalConfigXML(guiPort int, listenAddr string) string {
 	return fmt.Sprintf(`<configuration version="37">
     <gui enabled="true" tls="false">
         <address>127.0.0.1:%d</address>
     </gui>
     <options>
-        <listenAddress>tcp://127.0.0.1:%d</listenAddress>
+        <listenAddress>%s</listenAddress>
         <localAnnounceEnabled>false</localAnnounceEnabled>
         <globalAnnounceEnabled>false</globalAnnounceEnabled>
         <relaysEnabled>false</relaysEnabled>
@@ -330,5 +340,5 @@ func minimalConfigXML(guiPort int, bepPort int) string {
         <crashReportingEnabled>false</crashReportingEnabled>
     </options>
 </configuration>
-`, guiPort, bepPort)
+`, guiPort, xmlEscape(listenAddr))
 }

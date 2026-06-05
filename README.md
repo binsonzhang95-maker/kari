@@ -74,7 +74,8 @@ Every flag has an environment-variable equivalent; flags win over env.
 | `--secret` | `KARI_SECRET` | — | Shared secret; clients use it as their token (**required**) |
 | `--shell` | `KARI_SHELL` | `/bin/bash` | Shell for exec / PTY |
 | `--syncthing-binary` | `KARI_SYNCTHING_BINARY` | auto (PATH) | Absolute path to the Syncthing v1.30 binary |
-| `--syncthing-addr` | `KARI_SYNCTHING_ADDR` | derived from request host `:22000` | Advertised Syncthing address for clients |
+| `--syncthing-port` | `KARI_SYNCTHING_PORT` | `22000` | BEP data port the sidecar binds (`0.0.0.0`) and clients connect to |
+| `--syncthing-addr` | `KARI_SYNCTHING_ADDR` | derived from request host + port | Advertised Syncthing address for clients (overrides the derived one) |
 
 The client key is `SHA-256(secret)`; the same value gates every workspace on the
 server. There is no per-user or per-workspace key derivation — this is
@@ -116,6 +117,16 @@ AI CLI in a session ──► kari-mcp-bridge ──► signed loopback socket �
   open-source build. Run it on a box you're willing to give your team shell on.
 - The Syncthing sidecar's home is created `0700` and refuses a symlinked home;
   pair paths are validated to stay under `--sync-dir` (symlink-resolved).
+- The Syncthing BEP data port (`--syncthing-port`, default `22000`) is bound on
+  all interfaces so remote clients can reach it; LAN/global discovery, relays,
+  and NAT traversal are disabled, so only explicitly-paired devices connect.
+  **Pairing requires the shared secret** (the `/v1/syncthing/pair` endpoint is
+  token-gated), but once a device is paired its Syncthing device ID becomes a
+  second, standing credential: it keeps syncing without re-presenting the
+  secret. To revoke a client, remove its device from the sidecar's
+  `config.xml` (a built-in revoke endpoint is a planned follow-up). Rotating
+  `KARI_SECRET` blocks *new* pairings and all gRPC (PTY/exec/control) access,
+  but does not by itself evict an already-paired Syncthing device.
 
 ## License
 

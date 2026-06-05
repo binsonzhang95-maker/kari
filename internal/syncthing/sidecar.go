@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -73,6 +74,16 @@ type StartOptions struct {
 	// callers pass the full path; D2's "adjacent-to-self or PATH"
 	// lookup logic lives in the main-wiring PR (1.3b-4), not here.
 	Binary string
+
+	// DataListenAddress, when set, pins the Syncthing BEP (data) listen
+	// address verbatim — e.g. "tcp://0.0.0.0:22000" so remote clients can
+	// reach this sidecar on a fixed, externally-routable port. Empty (the
+	// default) keeps the original behaviour: a freshly pre-picked
+	// loopback-only ephemeral port (tcp://127.0.0.1:<free>), which only
+	// works when the peer reaches Syncthing through a tunnel/proxy. The
+	// single-tenant OSS server has no tunnel, so it sets this to bind all
+	// interfaces on the advertised port.
+	DataListenAddress string
 }
 
 // SidecarStatus is the snapshot read returned by Status(). Field
@@ -216,20 +227,28 @@ func (m *SidecarManager) Start(ctx context.Context, opts StartOptions) error {
 	// written until after cmd.Start succeeds, so retry doesn't
 	// stomp a marker.
 	var (
-		cmd       *exec.Cmd
-		port      int
-		bepPort   int
-		spawnErr  error
-		lastPort  int
-		lastBEP   int
-		attempted int
+		cmd        *exec.Cmd
+		port       int
+		bepPort    int
+		listenAddr string
+		spawnErr   error
+		lastPort   int
+		lastBEP    int
+		attempted  int
 	)
 	for attempted = 0; attempted < 2; attempted++ {
 		port, bepPort, err = prePickSidecarPorts()
 		if err != nil {
 			return fmt.Errorf("syncthing sidecar: pre-pick ports (attempt %d): %w", attempted+1, err)
 		}
-		if err := ensureConfigXML(opts.HomeDir, port, bepPort); err != nil {
+		// Data (BEP) listen address: default to the pre-picked loopback-only
+		// ephemeral port; the OSS server overrides this with a fixed,
+		// externally-routable address (e.g. tcp://0.0.0.0:22000).
+		listenAddr = fmt.Sprintf("tcp://127.0.0.1:%d", bepPort)
+		if opts.DataListenAddress != "" {
+			listenAddr = opts.DataListenAddress
+		}
+		if err := ensureConfigXML(opts.HomeDir, port, listenAddr); err != nil {
 			return fmt.Errorf("syncthing sidecar: ensure config.xml (attempt %d): %w", attempted+1, err)
 		}
 		cmd = exec.Command(argv[0], argv[1:]...)
@@ -308,7 +327,9 @@ func (m *SidecarManager) Start(ctx context.Context, opts StartOptions) error {
 	m.state.PID = cmd.Process.Pid
 	m.state.StartedAt = time.Now()
 	m.state.RestartCount++
-	m.state.BEPAddress = fmt.Sprintf("127.0.0.1:%d", bepPort)
+	// Report the address peers actually reach us on: the pinned
+	// DataListenAddress when set, else the pre-picked loopback port.
+	m.state.BEPAddress = strings.TrimPrefix(listenAddr, "tcp://")
 	// LastExitErr from previous run (if any) intentionally preserved
 	// for diagnostics.
 	return nil
