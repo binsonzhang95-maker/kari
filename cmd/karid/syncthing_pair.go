@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -18,9 +19,7 @@ type syncthingPairRequest struct {
 	DesktopName      string   `json:"desktop_name,omitempty"`
 	WorkspaceID      string   `json:"workspace_id"`
 	WorkspaceName    string   `json:"workspace_name"`
-	// ProjectPath is accepted for wire-compat but no longer namespaces the
-	// folder — the synced unit is the whole workspace tree (see handler).
-	ProjectPath string `json:"project_path,omitempty"`
+	ProjectPath      string   `json:"project_path"`
 }
 
 type syncthingPairResponse struct {
@@ -37,11 +36,13 @@ type syncthingPairResponse struct {
 // exist, adds the device to the folder membership, and returns the server's
 // device id + addresses so the client can configure its own side.
 //
-// The synced folder is the workspace tree at <sync_dir>/<workspace_id>/<workspace_name>
-// — IDENTICAL to the path engineFor() roots the gRPC/PTY/exec tree at, so the
-// files Syncthing mirrors and the directory a remote terminal opens in are the
-// same. Namespacing by workspace_id (not workspace_name) keeps distinct
-// workspaces that happen to share a name from colliding on one folder.
+// Each project is a Syncthing folder at
+// <sync_dir>/<workspace_id>/<workspace_name>/<project_path>, i.e. a subdir of
+// the workspace tree that engineFor() roots the gRPC/PTY/exec session at. So a
+// remote terminal opens at the workspace root (<workspace_id>/<workspace_name>)
+// and sees every paired project as a subdirectory Syncthing keeps in sync.
+// Namespacing by workspace_id keeps distinct workspaces that share a name from
+// colliding.
 func (s *server) handleSyncthingPair(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -83,12 +84,28 @@ func (s *server) handleSyncthingPair(w http.ResponseWriter, r *http.Request) {
 		pairErr(w, http.StatusBadRequest, "invalid_request", "workspace_name is required")
 		return
 	}
+	if req.ProjectPath == "" {
+		pairErr(w, http.StatusBadRequest, "missing_project_path", "project_path is required")
+		return
+	}
 
-	// The synced folder is the workspace tree, namespaced by workspace_id and
-	// keyed identically to engineFor() so PTY/exec and Syncthing share one
-	// directory. safeName() keeps each id/name to a single safe path segment.
-	folderID := syncthing.FolderIDForWorkspaceID(req.WorkspaceID)
-	folderPath := filepath.Join(s.cfg.SyncDir, safeName(req.WorkspaceID), safeName(req.WorkspaceName))
+	// Canonicalize project_path (backslashes → slashes, cleaned). FolderIDFor
+	// rejects absolute / drive / ".." paths, so the join stays under the
+	// workspace tree.
+	proj := strings.TrimPrefix(pathpkg.Clean("/"+strings.ReplaceAll(req.ProjectPath, "\\", "/")), "/")
+	if proj == "" || proj == "." {
+		pairErr(w, http.StatusBadRequest, "missing_project_path", "project_path is required")
+		return
+	}
+	folderID, err := syncthing.FolderIDFor(req.WorkspaceID, proj)
+	if err != nil {
+		pairErr(w, http.StatusBadRequest, "invalid_project_path", err.Error())
+		return
+	}
+	// Project folder = a subdir of the workspace tree (engineFor's root), so the
+	// PTY/exec session at <wsid>/<wsname> sees it. safeName() keeps each
+	// id/name segment safe; FromSlash maps the project path for the host OS.
+	folderPath := filepath.Join(s.cfg.SyncDir, safeName(req.WorkspaceID), safeName(req.WorkspaceName), filepath.FromSlash(proj))
 
 	// Folder dir + .stfolder marker must exist before telling Syncthing about
 	// the folder, or it fail-closes with "folder marker missing".
@@ -118,7 +135,7 @@ func (s *server) handleSyncthingPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.pairMu.Lock()
-	err := addDesktopDeviceToFolder(rec, folderID, folderPath, serverDevice, req.WorkspaceName, req)
+	err = addDesktopDeviceToFolder(rec, folderID, folderPath, serverDevice, req.WorkspaceName, req)
 	s.pairMu.Unlock()
 	if err != nil {
 		pairErr(w, http.StatusInternalServerError, "reconciler_failed", err.Error())

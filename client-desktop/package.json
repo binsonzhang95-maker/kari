@@ -1,0 +1,85 @@
+{
+  "name": "kari-desktop",
+  "version": "0.10.5",
+  "private": true,
+  "description": "Kari desktop control console.",
+  "main": "src/main/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1 --port 57932 --strictPort\" \"wait-on http://127.0.0.1:57932 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:57932 electron .\"",
+    "icons": "swift scripts/generate-app-icons.swift build && iconutil -c icns -o build/icon.icns build/icon.iconset && node scripts/generate-ico.cjs build/icon.ico build/icon.iconset",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test src/main/*.test.cjs",
+    "prepackage": "npm run build && node -e \"require('fs').statSync('dist/renderer/index.html')\"",
+    "package": "npx --yes electron-builder@26.8.1",
+    "test:syncthing": "node --test --test-timeout=180000 src/main/syncthing_process.test.cjs src/main/syncthing_e2e.spec.cjs"
+  },
+  "build": {
+    "appId": "com.kari.desktop",
+    "productName": "Kari",
+    "files": [
+      "dist/renderer/**/*",
+      "src/main/**/*.cjs",
+      "src/preload/**/*.cjs",
+      "src/shared/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "build/icon.png"
+      },
+      {
+        "from": "bundled-runtime",
+        "to": "bundled-runtime",
+        "filter": [
+          "**/*",
+          "!**/opencode",
+          "!**/opencode.exe"
+        ]
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
+    },
+    "win": {
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "icon": "build/icon.png"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
+    "@monaco-editor/react": "^4.7.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "ignore": "^5.3.2",
+    "lucide-react": "^0.468.0",
+    "monaco-editor": "^0.55.1",
+    "node-pty": "^1.0.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-diff-view": "3.3.3",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^34.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.6",
+    "wait-on": "^8.0.1"
+  }
+}

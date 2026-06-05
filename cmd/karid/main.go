@@ -9,8 +9,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -207,6 +209,15 @@ func (s *server) Sync(stream transport.FileService_SyncServer) error {
 	// (which would double-deliver files Syncthing already manages and race
 	// its writes). The legacy gRPC file transfer is intentionally disabled.
 	session.SetControlOnly(true)
+	// Serve the client's session-history request (the desktop's history view)
+	// over the control stream: a read-only scan of the host's
+	// ~/.claude / ~/.codex session dirs, scoped to this workspace tree. Without
+	// this handler the request is received but never answered and the client's
+	// in-flight slot wedges ("list sessions request already in flight").
+	session.SetListSessionsHandler(func(req transport.ListSessionsRequest) transport.ListSessionsResult {
+		home, _ := os.UserHomeDir()
+		return sessionhistory.ScanHome(home, req, engine.Root())
+	})
 	// Register for MCP local-exec routing if the client advertised it.
 	if s.localExec != nil && clientID != "" && transport.HasCapability(hello, transport.CapabilityLocalExec) {
 		unregister := s.localExec.register(wsid, clientID, session, hello.Capabilities)
@@ -385,14 +396,48 @@ func (s *server) authHTTP(r *http.Request) bool {
 	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.Secret)) == 1
 }
 
+// resolveOrGenerateSecret returns the configured shared secret, or — when none
+// was provided — a persisted one from <sync-dir>/.kari-secret, or a freshly
+// minted strong secret which it persists (0600) and prints once so the operator
+// can share it with the team. Persisting keeps the secret stable across
+// restarts so already-paired clients keep working.
+func resolveOrGenerateSecret(syncDir, explicit string) (string, error) {
+	if s := strings.TrimSpace(explicit); s != "" {
+		return s, nil
+	}
+	path := filepath.Join(syncDir, ".kari-secret")
+	if data, err := os.ReadFile(path); err == nil {
+		if s := strings.TrimSpace(string(data)); s != "" {
+			log.Printf("shared secret: loaded from %s (set KARI_SECRET to override)", path)
+			return s, nil
+		}
+	}
+	buf := make([]byte, 24)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	secret := base64.RawURLEncoding.EncodeToString(buf)
+	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
+		return "", fmt.Errorf("persist secret to %s: %w", path, err)
+	}
+	log.Printf("────────────────────────────────────────────────────────")
+	log.Printf("no KARI_SECRET set — generated one and saved it to %s:", path)
+	log.Printf("    %s", secret)
+	log.Printf("share it with your team; they enter it as the shared secret.")
+	log.Printf("────────────────────────────────────────────────────────")
+	return secret, nil
+}
+
 func main() {
 	cfg := loadConfig()
-	if strings.TrimSpace(cfg.Secret) == "" {
-		log.Fatal("no shared secret: set KARI_SECRET or --secret")
-	}
 	if err := os.MkdirAll(cfg.SyncDir, 0o755); err != nil {
 		log.Fatalf("create sync dir: %v", err)
 	}
+	secret, err := resolveOrGenerateSecret(cfg.SyncDir, cfg.Secret)
+	if err != nil {
+		log.Fatalf("resolve shared secret: %v", err)
+	}
+	cfg.Secret = secret
 	sum := sha256.Sum256([]byte(cfg.Secret))
 
 	s := &server{
