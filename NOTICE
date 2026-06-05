@@ -1,0 +1,54 @@
+kari
+Copyright (c) 2026 the kari authors.
+
+The kari server (server/) is licensed under the GNU Affero General Public
+License v3.0 (see LICENSE). The web console (client-web/) is licensed under the
+MIT License.
+
+This product depends on, or interoperates with, third-party software listed
+below. Each remains under its own license.
+
+================================================================================
+Runtime dependency (separate program, not bundled in this repository)
+================================================================================
+
+Syncthing — https://syncthing.net/
+    License: Mozilla Public License 2.0 (MPL-2.0)
+    kari runs Syncthing as a private sidecar process for file synchronization.
+    Syncthing is NOT distributed as part of this repository; operators install
+    it themselves. Pin Syncthing v1.30 (the v2.x REST API is incompatible with
+    the sidecar).
+
+================================================================================
+Go module dependencies (compiled into the karid / kari-mcp-bridge binaries)
+================================================================================
+
+github.com/admpub/conpty              MIT License
+github.com/creack/pty                 MIT License
+github.com/erikdubbelboer/gspt        BSD-3-Clause-like (see upstream)
+github.com/fsnotify/fsevents          BSD-3-Clause
+github.com/fsnotify/fsnotify          BSD-3-Clause
+github.com/google/uuid                BSD-3-Clause
+github.com/hashicorp/yamux            Mozilla Public License 2.0 (MPL-2.0)
+github.com/soheilhy/cmux              Apache License 2.0
+golang.org/x/crypto                   BSD-3-Clause
+golang.org/x/net                      BSD-3-Clause
+golang.org/x/sys                      BSD-3-Clause
+golang.org/x/term                     BSD-3-Clause
+golang.org/x/text                     BSD-3-Clause
+google.golang.org/grpc                Apache License 2.0
+google.golang.org/protobuf            BSD-3-Clause
+google.golang.org/genproto/...        Apache License 2.0
+modernc.org/sqlite                    BSD-3-Clause
+modernc.org/libc                      BSD-3-Clause
+modernc.org/mathutil                  BSD-3-Clause
+modernc.org/memory                    BSD-3-Clause
+github.com/dustin/go-humanize         MIT License
+github.com/mattn/go-isatty            MIT License
+github.com/ncruces/go-strftime        MIT License
+github.com/remyoudompheng/bigfft      BSD-3-Clause
+
+Full license texts are available in each module's source under the Go module
+cache (`go mod download` + `go/pkg/mod/...`) or at the projects' upstream
+repositories. This NOTICE is informational; the authoritative license for each
+dependency is the one shipped in that dependency's source tree.

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>kari · console</title>
+<style>
+  :root {
+    --bg: #141414; --surface: #1c1c1c; --surface2: #232323;
+    --text: #e6e6e6; --muted: #9a9a9a; --dim: #6a6a6a;
+    --border: #2e2e2e; --accent: #c9a227; --ok: #74c991; --bad: #d96c6c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 22px;
+    border-bottom: 1px solid var(--border); background: var(--surface); }
+  .logo { font-weight: 700; letter-spacing: .02em; font-size: 16px; }
+  .logo b { color: var(--accent); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .dot.bad { background: var(--bad); }
+  .status { color: var(--muted); font-size: 12.5px; }
+  .spacer { flex: 1; }
+  .token { display: flex; gap: 6px; }
+  .token input { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; font-size: 12.5px; width: 200px; outline: none; }
+  .token input:focus { border-color: var(--accent); }
+  button { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+  button:hover { border-color: var(--accent); color: #fff; }
+  main { max-width: 920px; margin: 0 auto; padding: 22px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+    margin: 0 0 12px; font-weight: 600; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .row { display: grid; grid-template-columns: 70px 1fr 140px 120px; gap: 12px; align-items: center;
+    padding: 11px 16px; border-top: 1px solid var(--border); }
+  .row:first-child { border-top: 0; }
+  .row .kind { font-size: 11px; font-weight: 700; color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 6px;
+    padding: 2px 8px; text-align: center; text-transform: uppercase; }
+  .row .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .proj, .row .time { color: var(--muted); font-size: 12.5px; }
+  .row .time { text-align: right; }
+  .empty, .err { padding: 26px 16px; text-align: center; color: var(--dim); }
+  .err { color: var(--bad); }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 14px; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="dot" id="dot"></span>
+    <span class="logo"><b>kari</b> console</span>
+    <span class="status" id="status">connecting…</span>
+    <span class="spacer"></span>
+    <span class="token">
+      <input id="token" type="password" placeholder="shared secret / token" autocomplete="off" />
+      <button id="connect">Connect</button>
+    </span>
+  </header>
+  <main>
+    <h2>Session history</h2>
+    <div class="card" id="sessions"><div class="empty">enter your token and Connect</div></div>
+    <div class="hint">Single-tenant self-host server · sessions scanned from the server host's Claude / Codex history.</div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+let token = params.get('token') || localStorage.getItem('kari_token') || '';
+if (params.get('token')) {
+  // Don't leave the token in the URL (browser history / bookmarks / Referer
+  // header / proxy logs). Read it once, then scrub the query string.
+  history.replaceState(null, '', location.pathname);
+}
+if (token) $('token').value = token;
+
+function relTime(nanos) {
+  const ms = Number(nanos) / 1e6;
+  if (!ms) return '';
+  const d = (Date.now() - ms) / 1000;
+  if (d < 60) return 'just now';
+  if (d < 3600) return Math.floor(d / 60) + 'm ago';
+  if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+  return Math.floor(d / 86400) + 'd ago';
+}
+
+async function health() {
+  try {
+    const r = await fetch('healthz');
+    const j = await r.json();
+    $('dot').className = 'dot ' + (j.ok ? 'ok' : 'bad');
+    $('status').textContent = j.ok ? 'server online' : 'server error';
+  } catch {
+    $('dot').className = 'dot bad';
+    $('status').textContent = 'server unreachable';
+  }
+}
+
+async function loadSessions() {
+  const box = $('sessions');
+  if (!token) { box.innerHTML = '<div class="empty">enter your token and Connect</div>'; return; }
+  try {
+    const r = await fetch('v1/sessions', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 401) { box.innerHTML = '<div class="err">unauthorized — wrong token</div>'; return; }
+    if (!r.ok) { box.innerHTML = '<div class="err">error ' + r.status + '</div>'; return; }
+    const data = await r.json();
+    const rows = [];
+    for (const src of (data.sources || [])) {
+      for (const s of (src.sessions || [])) {
+        rows.push({ kind: src.kind || 'remote', title: s.title || s.id, project: s.project || '', t: s.mtime || s.last_active_at || 0 });
+      }
+    }
+    rows.sort((a, b) => (b.t || 0) - (a.t || 0));
+    if (!rows.length) { box.innerHTML = '<div class="empty">no sessions found on the server host</div>'; return; }
+    box.innerHTML = rows.slice(0, 200).map((r) =>
+      `<div class="row"><span class="kind">${esc(r.kind)}</span>` +
+      `<span class="title" title="${esc(r.title)}">${esc(r.title)}</span>` +
+      `<span class="proj">${esc(r.project)}</span>` +
+      `<span class="time">${relTime(r.t)}</span></div>`).join('');
+  } catch (e) {
+    box.innerHTML = '<div class="err">' + esc(String(e)) + '</div>';
+  }
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+$('connect').onclick = () => {
+  token = $('token').value.trim();
+  localStorage.setItem('kari_token', token);
+  loadSessions();
+};
+$('token').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('connect').click(); });
+
+health(); loadSessions();
+setInterval(health, 5000);
+</script>
+</body>
+</html>

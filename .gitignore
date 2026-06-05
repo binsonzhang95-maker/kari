@@ -1,0 +1,31 @@
+# Go build outputs (single root module: binaries land at repo root)
+/karid
+/kari-mcp-bridge
+/kari-syncd
+/kari
+*.exe
+*.test
+*.out
+
+# Runtime / local state (never commit)
+workspaces/
+.syncthing-home/
+.kari-mcp/
+*.log
+
+# Electron desktop client
+client-desktop/node_modules/
+client-desktop/dist/
+# Bundled binaries (kari-syncd, syncthing v1.30, kari) are produced by the
+# build script, not committed — they're large and platform-specific.
+client-desktop/bundled-runtime/
+
+# Node
+node_modules/
+dist/node_modules/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
