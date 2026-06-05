@@ -1,5 +1,7 @@
 # kari
 
+**English** | [中文](README.zh-CN.md)
+
 Self-hostable, single-tenant **team file-sharing + remote terminal**.
 
 Point your team at one shared host: project files sync both ways over
