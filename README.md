@@ -2,17 +2,21 @@
 
 **English** | [中文](README.zh-CN.md)
 
-Self-hostable, single-tenant **team file-sharing + remote terminal**.
+Self-hosted **team backplane for AI coding CLIs** — run Claude Code, Codex,
+DeepSeek and other coding agents on one shared server, collaborating on shared
+projects.
 
-Point your team at one shared host: project files sync both ways over
-[Syncthing](https://syncthing.net/), and any member can open a real interactive
-shell or run commands on that host — all gated by a single shared secret, over
-an end-to-end-encrypted connection. A desktop app, a web console, and a CLI all
+Your team points at one host and runs their coding CLIs there, in remote
+terminals. Open **many sessions at once**, across **many projects**; project
+files sync both ways via [Syncthing](https://syncthing.net/) so everyone works
+on the **same project trees** in real time; and session history is shared so you
+can browse and resume past CLI runs. Each member connects with one shared secret
+over an end-to-end-encrypted link — a desktop app, a web console, and a CLI all
 talk to the same server.
 
 This is the open-source, single-tenant core: **no registry, no billing, no
-multi-tenant key database, no cloud, no LLM proxy, no containers.** One secret,
-one sync directory, one server binary that serves its own web console.
+multi-tenant key database, no cloud, no LLM proxy, no containers.** You bring
+your own CLI tools and run them on your own box.
 
 ## Components
 
@@ -27,12 +31,17 @@ one sync directory, one server binary that serves its own web console.
 
 ## Features
 
-- **Bidirectional file sync** backed by Syncthing — the server runs Syncthing as
-  a private, discovery-disabled sidecar and pairs client devices on demand.
-- **Remote interactive terminal** — a real PTY on POSIX, ConPTY on Windows.
-- **Remote command exec** with streamed output.
-- **Session history** — surfaces a host's `~/.claude` / `~/.codex` sessions.
-- **MCP local-exec bridge** for AI CLIs running inside a session.
+- **Run coding CLIs remotely** — open a real terminal on the server and launch
+  `claude`, `codex`, `deepseek`, … (PTY on POSIX, ConPTY on Windows).
+- **Multi-session, multi-project** — open many concurrent terminals across many
+  project trees at once; each project is its own synced folder in the workspace.
+- **Shared project files** — Syncthing mirrors every member's project tree both
+  ways (a private, discovery-disabled sidecar, paired on demand), so the team
+  collaborates on the same code.
+- **Shared session history** — browse and resume past Claude / Codex sessions
+  (`~/.claude`, `~/.codex`) surfaced from the host.
+- **MCP local-exec bridge** — let the AI CLI run host commands through an audited
+  loopback bridge.
 - **Embedded web console** — no separate web server to deploy.
 - **Cross-platform** server (macOS, Linux, Windows).
 
