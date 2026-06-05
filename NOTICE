@@ -1,9 +1,9 @@
 kari
 Copyright (c) 2026 the kari authors.
 
-The kari server (cmd/, internal/, web/) is licensed under the GNU Affero
-General Public License v3.0 (see LICENSE). The web console (client-web/) and the
-Electron desktop app (client-desktop/) are licensed under the MIT License.
+kari — the server (cmd/, internal/, web/), the web console (client-web/), and
+the Electron desktop app (client-desktop/) — is licensed under the GNU Affero
+General Public License v3.0 (see LICENSE).
 
 The desktop app (client-desktop/) is an Electron application; it depends on
 Electron, React, Vite, and other npm packages, each under its own license (see

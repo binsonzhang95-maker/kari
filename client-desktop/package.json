@@ -2,7 +2,8 @@
   "name": "kari-desktop",
   "version": "0.10.5",
   "private": true,
-  "description": "Kari desktop control console.",
+  "description": "Kari desktop client — team vibe coding on a shared server (Claude Code, Codex, DeepSeek).",
+  "license": "AGPL-3.0-or-later",
   "main": "src/main/main.cjs",
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1 --port 57932 --strictPort\" \"wait-on http://127.0.0.1:57932 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:57932 electron .\"",

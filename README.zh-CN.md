@@ -2,8 +2,8 @@
 
 [English](README.md) | **中文**
 
-可自托管的 **团队编码 CLI 协作底座** —— 让团队在同一台共享 server 上跑
-Claude Code、Codex、DeepSeek 等编码 agent,协同同一批项目。
+可自托管的 **团队 vibe coding 协作底座** —— 让团队在同一台共享 server 上跑
+AI 编码 CLI(Claude Code、Codex、DeepSeek …),协同同一批项目。
 
 团队指向同一台主机,在远程终端里跑各自的编码 CLI。**支持多开**(同时开很多会话)、
 **多项目**(跨多个项目树);项目文件通过 [Syncthing](https://syncthing.net/)
@@ -174,6 +174,7 @@ kari/
 
 ## 许可
 
-server 采用 **GNU AGPL-3.0** —— 见 [LICENSE](LICENSE)。Web 控制台(`client-web/`)
-和桌面应用(`client-desktop/`)采用 **MIT 许可**。第三方组件及其许可见
-[NOTICE](NOTICE)。
+kari 采用 **GNU AGPL-3.0** —— 见 [LICENSE](LICENSE),覆盖整个仓库:server、
+Web 控制台(`client-web/`)和桌面应用(`client-desktop/`)。你可以自用、修改、
+自托管(含商用),但只要把它对外做成网络服务,就必须以同一许可公开你的全部修改源码。
+第三方组件及其许可见 [NOTICE](NOTICE)。

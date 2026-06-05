@@ -2,9 +2,8 @@
 
 **English** | [中文](README.zh-CN.md)
 
-Self-hosted **team backplane for AI coding CLIs** — run Claude Code, Codex,
-DeepSeek and other coding agents on one shared server, collaborating on shared
-projects.
+Self-hosted backplane for **team vibe coding** — run AI coding CLIs (Claude
+Code, Codex, DeepSeek, …) on one shared server, collaborating on shared projects.
 
 Your team points at one host and runs their coding CLIs there, in remote
 terminals. Open **many sessions at once**, across **many projects**; project
@@ -194,7 +193,9 @@ kari/
 
 ## License
 
-The server is licensed under the **GNU AGPL-3.0** — see [LICENSE](LICENSE). The
-web console (`client-web/`) and desktop app (`client-desktop/`) are available
-under the **MIT License**. Third-party components and their licenses are listed
-in [NOTICE](NOTICE).
+kari is licensed under the **GNU AGPL-3.0** — see [LICENSE](LICENSE). This covers
+the whole repository: the server, the web console (`client-web/`), and the
+desktop app (`client-desktop/`). You may use, modify, and self-host it
+(including commercially), but if you offer it to others as a network service you
+must release your full modified source under the same license. Third-party
+components and their licenses are listed in [NOTICE](NOTICE).
