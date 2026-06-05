@@ -1,5 +1,7 @@
 # kari
 
+<img width="1440" height="920" alt="image" src="https://github.com/user-attachments/assets/dad0b16f-bdfa-420c-a654-ab65e701853c" />
+
 **English** | [中文](README.zh-CN.md)
 
 Self-hosted backplane for **team vibe coding** — run AI coding CLIs (Claude
